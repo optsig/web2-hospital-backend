@@ -88,7 +88,7 @@ app.post("/verifyuser", (req, res) => {
       if (!match) {
         return res.status(401).json({ error: "invalid credentials" })
       }
-      return res.status(200).json({ message: "user verified", name: user.username, id: user.role_id });
+      return res.status(200).json({ message: "user verified", name: user.username, role_id: user.role_id, user_id: user.id });
     }
   })
 })
@@ -102,7 +102,7 @@ app.get("/getdoctors", (req, res) => {
       return res.status(500).json({ message: "Database error", error: err });
     } else {
       if (data.length === 0) {
-        return res.status(204).json({ message: "No doctors found" });
+        return res.status(204).send("No doctors found");
       }
       return res.status(200).json(data);
     }
@@ -228,16 +228,48 @@ app.get("/getnumberofpatients", (req, res) => {
 })
 
 app.get("/getavailabilities", (req, res) => {
-  const q = "SELECT a.id, a.availability_date, a.availability_time, d.first_name, d.last_name, d.specialty FROM availability a JOIN doctors d ON d.id = a.doctor_id WHERE a.is_booked = FALSE";
+  const q = `
+  SELECT a.id, a.availability_date, a.availability_time,
+  d.first_name, d.last_name, d.specialty 
+  FROM availability a 
+  JOIN doctors d ON d.id = a.doctor_id WHERE a.is_booked = FALSE
+  `
 
   db.query(q, (err, data) => {
     if (err) {
       return res.status(500).json({ message: "Database error", error: err });
     } else {
       if (data.length === 0) {
-        return res.status(204).json({ message: "No availabilities found" });
+        return res.status(204).send("No availabilities found");
       }
       return res.status(200).json(data);
     }
   });
+})
+
+
+app.get("/getappointments/:userid", (req, res) => {
+  const userId = req.params.userid
+  const q = `
+  SELECT ap.id, ap.reason,
+  a.availability_date, a.availability_time,
+  d.first_name, d.last_name, d.specialty
+  FROM users u JOIN patients p ON p.user_id = u.id
+  JOIN appointments ap ON ap.patient_id = p.id
+  JOIN availability a ON a.id = ap.availability_id
+  JOIN doctors d ON d.id = ap.doctor_id
+  WHERE u.id = ?
+  `
+  db.query(q, [userId], (err, data) => {
+    if (err) {
+      if (data.length === 0) {
+        return res.status(204).send("No appointments found for this user");
+      }
+      return res.status(500).json({ message: "Database error", error: err });
+    }
+    else {
+      return res.status(200).json(data)
+    }
+  })
+
 })
