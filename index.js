@@ -102,9 +102,80 @@ app.get("/getdoctors", (req, res) => {
       return res.status(500).json({ message: "Database error", error: err });
     } else {
       if (data.length === 0) {
-        return res.status(204).send("No students found");
+        return res.status(204).json({ message: "No doctors found" });
       }
       return res.status(200).json(data);
     }
   });
 })
+
+app.delete("/doctors/:id", (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ message: "doctor ID is required" });
+  }
+
+  if (isNaN(Number(id))) {
+    return res.status(400).json({ message: "doctor ID must be a number" });
+  }
+
+  const q = "DELETE FROM doctors WHERE id = ?";
+
+  db.query(q, [id], (err, data) => {
+    if (err) {
+      // if(err.errno === 1451){
+      //   return res.status(400).json({message: "foreign key error"})
+      // }
+      return res.status(500).json({ message: "Database error", error: err });
+    } else {
+      if (data.affectedRows === 0) {
+        return res.status(404).json({ message: "doctor not found" });
+      }
+      return res.status(200).json({ message: "doctor deleted successfully" });
+    }
+  });
+});
+
+app.post("/adddoctor", async (req, res) => {
+  const { username, password, firstName, lastName, specialty } = req.body;
+
+  const errors = [];
+  if (!username) errors.push("Username required");
+  if (!password) errors.push("Password required");
+  if (!firstName) errors.push("First name required");
+  if (!lastName) errors.push("Last name required");
+  if (!specialty) errors.push("Specialty required");
+
+  if (errors.length > 0) {
+    return res.status(400).json({ error: errors });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const userQuery = "INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)";
+    db.query(userQuery, [username, hashedPassword, 2], (err, data) => {
+      if (err) {
+        return res.status(500).json({ message: "error creating user", error: err });
+      }
+
+      const userId = data.insertId;
+
+      const doctorQuery = "INSERT INTO doctors (user_id, first_name, last_name, specialty) VALUES (?, ?, ?, ?)";
+      db.query(doctorQuery, [userId, firstName, lastName, specialty], (err, doctorData) => {
+        if (err) {
+          return res.status(500).json({ message: "error creating doctor", error: err });
+        }
+
+        return res.status(201).json({
+          message: "Doctor created successfully",
+          doctorId: doctorData.insertId,
+          userId: userId
+        });
+      });
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "internal error", error: error });
+  }
+});
