@@ -23,6 +23,8 @@ const db = mysql.createConnection({
 
 //todo: add check fields endpoint for the register page and call it on the onLeave event 
 
+
+//add user 
 app.post("/adduser", async (req, res) => {
 
   if (!req.body) {
@@ -60,6 +62,7 @@ app.post("/adduser", async (req, res) => {
   });
 });
 
+//verify user 
 
 app.post("/verifyuser", (req, res) => {
 
@@ -93,6 +96,7 @@ app.post("/verifyuser", (req, res) => {
   })
 })
 
+//get doctors
 
 app.get("/getdoctors", (req, res) => {
   const q = "SELECT * FROM doctors";
@@ -109,6 +113,7 @@ app.get("/getdoctors", (req, res) => {
   });
 })
 
+//delete doctor
 app.delete("/doctors/:id", (req, res) => {
   const { id } = req.params;
 
@@ -128,7 +133,7 @@ app.delete("/doctors/:id", (req, res) => {
     }
     else {
       if (data.length === 0) {
-        return res.status(404).json({ message: "doctor not found" })
+        return res.status(404).json({ message: "doctor not found", type: "doctor_not_found" })
       }
       const userId = data[0].user_id
       const deleteUserQuery = "DELETE FROM users WHERE id = ?"
@@ -138,7 +143,7 @@ app.delete("/doctors/:id", (req, res) => {
         }
         else {
           if (data.affectedRows === 0) {
-            return res.status(404).json({ message: "no user account for this doctor found" })
+            return res.status(404).json({ message: "no user account for this doctor found", type: "doctor_user_not_found" })
           }
           else if (data.affectedRows === 1) {
             return res.status(200).json({ message: "doctor deleted successfully" })
@@ -152,7 +157,7 @@ app.delete("/doctors/:id", (req, res) => {
 })
 
 
-
+// add doctor
 app.post("/adddoctor", async (req, res) => {
   const { username, password, firstName, lastName, specialty } = req.body;
 
@@ -207,6 +212,7 @@ app.post("/adddoctor", async (req, res) => {
   }
 });
 
+//get nb of appointments
 app.get("/getnumberofappointments", (req, res) => {
   const q = "SELECT COUNT(*) AS count FROM appointments"
   db.query(q, (err, data) => {
@@ -217,6 +223,7 @@ app.get("/getnumberofappointments", (req, res) => {
   })
 })
 
+//get nb of patients
 app.get("/getnumberofpatients", (req, res) => {
   const q = "SELECT COUNT(*) AS count FROM patients"
   db.query(q, (err, data) => {
@@ -227,6 +234,7 @@ app.get("/getnumberofpatients", (req, res) => {
   })
 })
 
+//get availabilities
 app.get("/getavailabilities", (req, res) => {
   const q = `
   SELECT a.id, a.availability_date, a.availability_time,
@@ -247,11 +255,11 @@ app.get("/getavailabilities", (req, res) => {
   });
 })
 
-
+// get appointments
 app.get("/getappointments/:userid", (req, res) => {
   const userId = req.params.userid
   const q = `
-  SELECT ap.id, ap.reason,
+  SELECT ap.id,
   a.availability_date, a.availability_time,
   d.first_name, d.last_name, d.specialty
   FROM users u JOIN patients p ON p.user_id = u.id
@@ -273,3 +281,78 @@ app.get("/getappointments/:userid", (req, res) => {
   })
 
 })
+
+//book appointment
+app.post("/bookappointment", (req, res) => {
+  const { userId, availabilityId } = req.body;
+
+  if (!userId || !availabilityId) {
+    return res.status(400).json({ message: "userId and availabilityId are required" });
+  }
+
+  const getPatientQ = "SELECT id FROM patients WHERE user_id = ?";
+  db.query(getPatientQ, [userId], (err, patientData) => {
+    if (err) {
+      return res.status(500).json({ message: "Database error", error: err });
+    }
+    const patientId = patientData[0].id;
+
+    const getAvailQ = "SELECT doctor_id, is_booked FROM availability WHERE id = ?";
+    db.query(getAvailQ, [availabilityId], (err, availData) => {
+      if (err) {
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+      if (availData.length === 0) {
+        return res.status(404).json({ message: "Slot not found" });
+      }
+      if (availData[0].is_booked) {
+        return res.status(409).json({ message: "Slot already booked" });
+      }
+      const doctorId = availData[0].doctor_id;
+
+      const insertApptQ = "INSERT INTO appointments (patient_id, doctor_id, availability_id) VALUES (?, ?, ?)";
+      db.query(insertApptQ, [patientId, doctorId, availabilityId], (err, data) => {
+        if (err) {
+          return res.status(500).json({ message: "Error creating appointment", error: err });
+        }
+        const updateAvailQ = "UPDATE availability SET is_booked = true WHERE id = ?";
+        db.query(updateAvailQ, [availabilityId], (err) => {
+          if (err) {
+            return res.status(500).json({ message: "Error updating availability", error: err });
+          }
+          return res.status(201).json({ message: "Appointment booked successfully" });
+        });
+      });
+    });
+  });
+});
+
+//cancel appointment
+app.delete("/appointments/:appointmentId", (req, res) => {
+  const { appointmentId } = req.params;
+
+  const getApptIdQ = "SELECT availability_id FROM appointments WHERE id = ?";
+  db.query(getApptIdQ, [appointmentId], (err, data) => {
+    if (err) {
+      return res.status(500).json({ message: "Database error", error: err });
+    }
+    if (data.length === 0) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+    const availabilityId = data[0].availability_id;
+
+    const deleteApptQ = "DELETE FROM appointments WHERE id = ?";
+    db.query(deleteApptQ, [appointmentId], (err) => {
+      if (err) {
+        return res.status(500).json({ message: "Error deleting appointment", error: err });
+      }
+      const updateAvailQ = "UPDATE availability SET is_booked = FALSE WHERE id = ?";
+      db.query(updateAvailQ, [availabilityId], (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Error updating availability", error: err });
+        }
+        return res.status(200).json({ message: "Appointment canceled successfully" });
+      });
+    });
+  });
+});
