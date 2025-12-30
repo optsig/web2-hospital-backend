@@ -120,22 +120,38 @@ app.delete("/doctors/:id", (req, res) => {
     return res.status(400).json({ message: "doctor ID must be a number" });
   }
 
-  const q = "DELETE FROM doctors WHERE id = ?";
+  const getUserIdQuery = "SELECT user_id FROM doctors WHERE id = ?"
 
-  db.query(q, [id], (err, data) => {
+  db.query(getUserIdQuery, [id], (err, data) => {
     if (err) {
-      // if(err.errno === 1451){
-      //   return res.status(400).json({message: "foreign key error"})
-      // }
       return res.status(500).json({ message: "Database error", error: err });
-    } else {
-      if (data.affectedRows === 0) {
-        return res.status(404).json({ message: "doctor not found" });
-      }
-      return res.status(200).json({ message: "doctor deleted successfully" });
     }
-  });
-});
+    else {
+      if (data.length === 0) {
+        return res.status(404).json({ message: "doctor not found" })
+      }
+      const userId = data[0].user_id
+      const deleteUserQuery = "DELETE FROM users WHERE id = ?"
+      db.query(deleteUserQuery, [userId], (err, data) => {
+        if (err) {
+          return res.status(500).json({ message: "Database error", error: err });
+        }
+        else {
+          if (data.affectedRows === 0) {
+            return res.status(404).json({ message: "no user account for this doctor found" })
+          }
+          else if (data.affectedRows === 1) {
+            return res.status(200).json({ message: "doctor deleted successfully" })
+          }
+        }
+      })
+    }
+  })
+
+
+})
+
+
 
 app.post("/adddoctor", async (req, res) => {
   const { username, password, firstName, lastName, specialty } = req.body;
@@ -157,6 +173,9 @@ app.post("/adddoctor", async (req, res) => {
     const userQuery = "INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)";
     db.query(userQuery, [username, hashedPassword, 2], (err, data) => {
       if (err) {
+        if (err.errno === 1062) {
+          return res.status(400).json({ message: err.sqlMessage, type: "duplicate_user" });
+        }
         return res.status(500).json({ message: "error creating user", error: err });
       }
 
@@ -165,8 +184,16 @@ app.post("/adddoctor", async (req, res) => {
       const doctorQuery = "INSERT INTO doctors (user_id, first_name, last_name, specialty) VALUES (?, ?, ?, ?)";
       db.query(doctorQuery, [userId, firstName, lastName, specialty], (err, doctorData) => {
         if (err) {
+          if (err.errno === 1062) {
+            db.query("DELETE FROM users WHERE id = ?", [userId]);
+            return res.status(400).json({
+              message: err.sqlMessage, type: "duplicate_doctor",
+            });
+          }
+
           return res.status(500).json({ message: "error creating doctor", error: err });
         }
+
 
         return res.status(201).json({
           message: "Doctor created successfully",
@@ -179,3 +206,23 @@ app.post("/adddoctor", async (req, res) => {
     return res.status(500).json({ message: "internal error", error: error });
   }
 });
+
+app.get("/getnumberofappointments", (req, res) => {
+  const q = "SELECT COUNT(*) AS count FROM appointments"
+  db.query(q, (err, data) => {
+    if (err) {
+      return res.status(500).json({ message: "Database error", error: err });
+    }
+    return res.status(200).json({ count: data[0].count });
+  })
+})
+
+app.get("/getnumberofpatients", (req, res) => {
+  const q = "SELECT COUNT(*) AS count FROM patients"
+  db.query(q, (err, data) => {
+    if (err) {
+      return res.status(500).json({ message: "Database error", error: err });
+    }
+    return res.status(200).json({ count: data[0].count });
+  })
+})
