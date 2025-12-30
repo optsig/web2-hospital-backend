@@ -226,3 +226,18 @@ app.get("/getnumberofpatients", (req, res) => {
     return res.status(200).json({ count: data[0].count });
   })
 })
+
+app.get("/getavailabilities", (req, res) => {
+  const q = "SELECT a.id, a.availability_date, a.availability_time, d.first_name, d.last_name, d.specialty FROM availability a JOIN doctors d ON d.id = a.doctor_id WHERE a.is_booked = FALSE";
+
+  db.query(q, (err, data) => {
+    if (err) {
+      return res.status(500).json({ message: "Database error", error: err });
+    } else {
+      if (data.length === 0) {
+        return res.status(204).json({ message: "No availabilities found" });
+      }
+      return res.status(200).json(data);
+    }
+  });
+})
