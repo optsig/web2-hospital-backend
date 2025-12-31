@@ -1,5 +1,6 @@
+import 'dotenv/config'
 import cors from "cors";
-import mysql from "mysql";
+import mysql from "mysql2";
 
 import express from "express";
 import bcrypt from "bcrypt";
@@ -15,10 +16,19 @@ app.use(cors());
 app.use(express.json());
 
 const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "hospital",
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+});
+
+db.connect((err) => {
+  if (err) {
+    console.error('Database connection failed:', err.stack);
+    return;
+  }
+  console.log('Connected to database.');
 });
 
 //todo: add check fields endpoint for the register page and call it on the onLeave event 
@@ -246,7 +256,8 @@ app.get("/getavailabilities", (req, res) => {
   db.query(q, (err, data) => {
     if (err) {
       return res.status(500).json({ message: "Database error", error: err });
-    } else {
+    }
+    else {
       if (data.length === 0) {
         return res.status(204).send("No availabilities found");
       }
@@ -271,12 +282,13 @@ app.get("/getappointments/:userid", (req, res) => {
   `
   db.query(q, [userId], (err, data) => {
     if (err) {
-      if (data.length === 0) {
-        return res.status(204).send("No appointments found for this user");
-      }
+
       return res.status(500).json({ message: "Database error", error: err });
     }
     else {
+      if (data.length === 0) {
+        return res.status(204).send("No appointments found for this user");
+      }
       return res.status(200).json(data)
     }
   })
@@ -404,7 +416,12 @@ app.post("/addavailability", (req, res) => {
     const insertQ = "INSERT INTO availability (availability_date, availability_time, doctor_id, is_booked) VALUES (?, ?, ?, false)"
 
     db.query(insertQ, [date, time, doctorId], (err) => {
-      if (err) return res.status(500).json(err);
+      if (err) {
+        if (err.errno === 1062) {
+          return res.status(400).json({ message: "duplicate entry", error: err.sqlMessage })
+        }
+        return res.status(500).json(err);
+      }
       res.status(201).json({ message: "availability added" });
     });
   });
