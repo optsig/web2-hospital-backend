@@ -41,7 +41,7 @@ app.post("/adduser", async (req, res) => {
     return res.status(400).json({ error: "Request body is missing" })
   }
 
-  const { username, password } = req.body
+  const { username, password, firstName, lastName } = req.body
 
   const errors = []
   if (!username) {
@@ -63,12 +63,15 @@ app.post("/adduser", async (req, res) => {
         return res.status(400).json({ error: err.sqlMessage });
       }
       return res.status(500).json({ error: err });
-    } else {
-      return res.status(201).json({
-        message: "User created successfully",
-        id: data.insertId
-      });
     }
+    const userId = data.insertId
+    const patientQ = "INSERT INTO patients (first_name, last_name, user_id) VALUES (?, ?, ?)"
+    db.query(patientQ, [firstName, lastName, userId], (err, data) => {
+      if (err) {
+        return res.status(500).json({ error: err });
+      }
+      return res.status(201).json({ message: "user created successfully" })
+    })
   });
 });
 
@@ -310,9 +313,10 @@ app.post("/bookappointment", (req, res) => {
     }
 
     if (patientData.length === 0) {
+      console.log("DEBUG: No patient found for userId:", userId);
       return res.status(404).json({ message: "Patient not found" });
     }
-    
+
     const patientId = patientData[0].id;
 
     const getAvailQ = "SELECT doctor_id, is_booked FROM availability WHERE id = ?";
