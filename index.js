@@ -308,6 +308,11 @@ app.post("/bookappointment", (req, res) => {
     if (err) {
       return res.status(500).json({ message: "Database error", error: err });
     }
+
+    if (patientData.length === 0) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+    
     const patientId = patientData[0].id;
 
     const getAvailQ = "SELECT doctor_id, is_booked FROM availability WHERE id = ?";
