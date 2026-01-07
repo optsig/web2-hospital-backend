@@ -51,7 +51,7 @@ app.post("/adduser", async (req, res) => {
     errors.push("password required")
   }
   if (errors.length > 0) {
-    return res.status(400).json({ error: errors });
+    return res.status(400).json({ error: errors, type: "missing_fields" });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -60,7 +60,7 @@ app.post("/adduser", async (req, res) => {
   db.query(q, [username, hashedPassword, 3], (err, data) => {
     if (err) {
       if (err.errno === 1062) {
-        return res.status(400).json({ error: err.sqlMessage });
+        return res.status(400).json({ error: err.sqlMessage, type: "duplicate_username" });
       }
       return res.status(500).json({ error: err });
     }
