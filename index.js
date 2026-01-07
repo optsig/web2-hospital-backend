@@ -393,7 +393,7 @@ app.get("/getdoctoravailabilities/:userId", (req, res) => {
     }
     const doctorId = doctorData[0].id;
 
-    const getAvailQ = "SELECT id, availability_date, availability_time, is_booked FROM availability WHERE doctor_id = ?"
+    const getAvailQ = "SELECT id, availability_date, availability_time, is_booked FROM availability WHERE doctor_id = ? and is_booked = 0"
 
 
     db.query(getAvailQ, [doctorId], (err, data) => {
